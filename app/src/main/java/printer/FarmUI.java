@@ -6,13 +6,7 @@ import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.chart.BarChart;
-import javafx.scene.chart.CategoryAxis;
-import javafx.scene.chart.NumberAxis;
-import javafx.scene.chart.XYChart;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ProgressBar;
+import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -20,308 +14,591 @@ import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class FarmUI extends Application {
 
-    private StackPane mainContainer;
-    private BorderPane dashboardScreen, detailScreen, analyticsScreen;
+    private static final String BG_DEEP     = "#0f0f14";
+    private static final String BG_CARD     = "#1a1a22";
+    private static final String BG_CARD2    = "#22222d";
+    private static final String BORDER      = "#2e2e3e";
+    private static final String ACCENT_GREEN= "#00d68f";
+    private static final String ACCENT_RED  = "#ff4d6d";
+    private static final String ACCENT_BLUE = "#4d9fff";
+    private static final String ACCENT_ORG  = "#ff9f43";
+    private static final String TEXT_MAIN   = "#e8e8f0";
+    private static final String TEXT_DIM    = "#8888a0";
 
-    // Canlı Veri Elemanları
-    private Label nozzleCurrentLabel, nozzleTargetLabel;
-    private Label bedCurrentLabel, bedTargetLabel;
-    private Label timeLabel, rawLabel;
+    private StackPane root;
+    private BorderPane dashScreen, detailScreen, analyticsScreen;
+
+    private Label detailTitle;
+    private Label nozzleCurr, nozzleTgt;
+    private Label bedCurr, bedTgt;
     private ProgressBar progressBar;
-    
-    private VBox analyticsChartContainer;
+    private Label progressPct, elapsedLbl, rawLbl, connectionLbl;
+
+    private PrinterState selectedPrinter;
+
+    private FlowPane printerGrid;
+    private Map<String, Label> cardStatusMap = new HashMap<>();
 
     @Override
-    public void start(Stage primaryStage) {
-        mainContainer = new StackPane();
-        mainContainer.setStyle("-fx-background-color: #141418;"); // Derin karanlık arka plan
+    public void start(Stage stage) {
+        root = new StackPane();
+        root.setStyle("-fx-background-color: " + BG_DEEP + ";");
 
-        // Sahneleri Oluştur
-        dashboardScreen = createDashboardScreen();
-        detailScreen = createPrinterDetailScreen();
-        analyticsScreen = createAnalyticsScreen();
+        dashScreen     = buildDashboard();
+        detailScreen   = buildDetailScreen();
+        analyticsScreen = buildAnalyticsScreen();
 
-        // Başlangıçta sadece Dashboard görünür olsun
         detailScreen.setVisible(false);
         analyticsScreen.setVisible(false);
 
-        mainContainer.getChildren().addAll(analyticsScreen, detailScreen, dashboardScreen);
+        root.getChildren().addAll(analyticsScreen, detailScreen, dashScreen);
 
-        // Tam ekran ve Pencere ayarları
-        Scene scene = new Scene(mainContainer, 1280, 720);
-        primaryStage.setTitle("Monitor");
-        primaryStage.setScene(scene);
-        primaryStage.setMaximized(true); // Tam ekran başlatır
-        primaryStage.show();
+        Scene scene = new Scene(root, 1280, 720);
+        stage.setTitle("3D Farm Monitor");
+        stage.setScene(scene);
+        stage.setMaximized(true);
+        stage.show();
 
-        // Arka plan seri port okumasını başlat
-        Thread serialThread = new Thread(PrinterManager::startMonitoring);
-        serialThread.setDaemon(true);
-        serialThread.start();
+        Thread monThread = new Thread(PrinterManager::startMonitoring);
+        monThread.setDaemon(true);
+        monThread.start();
 
-        // JavaFX Timeline (Swing Timer yerine kullanılır, pürüzsüz UI günceller)
-        Timeline uiUpdater = new Timeline(new KeyFrame(Duration.millis(500), e -> updateLiveUI()));
-        uiUpdater.setCycleCount(Timeline.INDEFINITE);
-        uiUpdater.play();
+        Timeline uiTimer = new Timeline(new KeyFrame(Duration.millis(500), e -> tickUI()));
+        uiTimer.setCycleCount(Timeline.INDEFINITE);
+        uiTimer.play();
+
+        Timeline initTimer = new Timeline(new KeyFrame(Duration.seconds(3), e -> refreshDashboardCards()));
+        initTimer.setCycleCount(1);
+        initTimer.play();
     }
 
-    // Ekranlar arası geçiş fonksiyonu
-    private void switchScreen(BorderPane screenToShow) {
-        dashboardScreen.setVisible(false);
+    private void show(BorderPane screen) {
+        dashScreen.setVisible(false);
         detailScreen.setVisible(false);
         analyticsScreen.setVisible(false);
-        screenToShow.setVisible(true);
+        screen.setVisible(true);
     }
 
-    // =====================================================================
-    // SAHNE 1: DASHBOARD
-    // =====================================================================
-    private BorderPane createDashboardScreen() {
+    private BorderPane buildDashboard() {
         BorderPane pane = new BorderPane();
-        
-        Label title = new Label("DASHBOARD");
-        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 36));
-        title.setTextFill(Color.WHITE);
-        BorderPane.setAlignment(title, Pos.CENTER);
-        BorderPane.setMargin(title, new Insets(50, 0, 50, 0));
-        pane.setTop(title);
+        pane.setStyle("-fx-background-color: " + BG_DEEP + ";");
 
-        FlowPane grid = new FlowPane();
-        grid.setAlignment(Pos.CENTER);
-        grid.setHgap(40);
-        grid.setVgap(40);
+        HBox top = new HBox();
+        top.setAlignment(Pos.CENTER_LEFT);
+        top.setPadding(new Insets(24, 40, 24, 40));
+        top.setStyle("-fx-background-color: " + BG_CARD + "; -fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
-        VBox printerCard = createPrinterCard("Ender 3 Neo", "COM Port Bağlı", "#2ecc71");
-        printerCard.setOnMouseClicked(e -> switchScreen(detailScreen));
-        
-        grid.getChildren().add(printerCard);
-        pane.setCenter(grid);
+        Label logo = new Label("⬡");
+        logo.setFont(Font.font("Segoe UI", 28));
+        logo.setTextFill(Color.web(ACCENT_GREEN));
+
+        Label title = new Label("  3D FARM MONITOR");
+        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
+        title.setTextFill(Color.web(TEXT_MAIN));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button statsBtn = btn("📊  Genel İstatistikler", ACCENT_BLUE);
+        statsBtn.setOnAction(e -> { refreshAnalytics(); show(analyticsScreen); });
+
+        top.getChildren().addAll(logo, title, spacer, statsBtn);
+        pane.setTop(top);
+
+        printerGrid = new FlowPane();
+        printerGrid.setAlignment(Pos.TOP_LEFT);
+        printerGrid.setHgap(24);
+        printerGrid.setVgap(24);
+        printerGrid.setPadding(new Insets(40));
+
+        Label loading = new Label("Yazıcılar taranıyor...");
+        loading.setTextFill(Color.web(TEXT_DIM));
+        loading.setFont(Font.font("Segoe UI", 16));
+        printerGrid.getChildren().add(loading);
+
+        ScrollPane scroll = new ScrollPane(printerGrid);
+        scroll.setFitToWidth(true);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        pane.setCenter(scroll);
 
         return pane;
     }
 
-    private VBox createPrinterCard(String name, String status, String colorHex) {
-        VBox card = new VBox(15);
-        card.setAlignment(Pos.CENTER);
-        card.setPrefSize(280, 220);
-        card.setStyle("-fx-background-color: #232328; -fx-border-color: #3c3c46; -fx-border-width: 2; -fx-border-radius: 10; -fx-background-radius: 10;");
+    private void refreshDashboardCards() {
+        List<PrinterState> printers = PrinterManager.getPrinters();
+        printerGrid.getChildren().clear();
+        cardStatusMap.clear();
 
-        // Hover Efekti (Mouse üstüne gelince)
-        card.setOnMouseEntered(e -> card.setStyle("-fx-background-color: #2f2f36; -fx-border-color: #4a4a55; -fx-border-width: 2; -fx-border-radius: 10; -fx-background-radius: 10; -fx-cursor: hand;"));
-        card.setOnMouseExited(e -> card.setStyle("-fx-background-color: #232328; -fx-border-color: #3c3c46; -fx-border-width: 2; -fx-border-radius: 10; -fx-background-radius: 10;"));
+        if (printers.isEmpty()) {
+            Label empty = new Label("Hiç yazıcı bulunamadı.\nUSB bağlantısını kontrol edin.");
+            empty.setTextFill(Color.web(TEXT_DIM));
+            empty.setFont(Font.font("Segoe UI", 16));
+            printerGrid.getChildren().add(empty);
+            return;
+        }
 
-        Label icon = new Label("🖨️");
-        icon.setFont(Font.font("Segoe UI", 48));
+        for (PrinterState p : printers) {
+            VBox card = buildPrinterCard(p);
+            printerGrid.getChildren().add(card);
+        }
+    }
 
-        Label nameLabel = new Label(name);
-        nameLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
-        nameLabel.setTextFill(Color.WHITE);
+    private VBox buildPrinterCard(PrinterState p) {
+        VBox card = new VBox(14);
+        card.setPrefSize(300, 230);
+        card.setPadding(new Insets(24));
+        card.setStyle(cardStyle(false));
 
-        Label statusLabel = new Label("● " + status);
-        statusLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
-        statusLabel.setTextFill(Color.web(colorHex));
+        card.setOnMouseEntered(e -> card.setStyle(cardStyle(true)));
+        card.setOnMouseExited(e  -> card.setStyle(cardStyle(false)));
+        card.setOnMouseClicked(e -> { selectedPrinter = p; refreshDetailScreen(); show(detailScreen); });
 
-        card.getChildren().addAll(icon, nameLabel, statusLabel);
+        Label icon = new Label("🖨");
+        icon.setFont(Font.font("Segoe UI", 36));
+
+        Label name = new Label(p.displayName);
+        name.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
+        name.setTextFill(Color.web(TEXT_MAIN));
+
+        Label status = new Label(p.connected ? "● Bağlı" : "○ Bağlı Değil");
+        status.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+        status.setTextFill(Color.web(p.connected ? ACCENT_GREEN : TEXT_DIM));
+        cardStatusMap.put(p.portName, status);
+        HBox temps = new HBox(16);
+        Label noz = new Label("Nozzle: " + p.nozzleCurrent + "°C");
+        noz.setFont(Font.font("Segoe UI", 13));
+        noz.setTextFill(Color.web(ACCENT_RED));
+        Label bed = new Label("Tabla: " + p.bedCurrent + "°C");
+        bed.setFont(Font.font("Segoe UI", 13));
+        bed.setTextFill(Color.web(ACCENT_BLUE));
+        temps.getChildren().addAll(noz, bed);
+
+        ProgressBar miniBar = new ProgressBar(p.progressPercent / 100.0);
+        miniBar.setPrefWidth(250);
+        miniBar.setStyle("-fx-accent: " + ACCENT_GREEN + ";");
+        Label pctLbl = new Label(p.progressPercent + "%");
+        pctLbl.setTextFill(Color.web(TEXT_DIM));
+        pctLbl.setFont(Font.font("Segoe UI", 12));
+
+        card.getChildren().addAll(icon, name, status, temps, miniBar, pctLbl);
         return card;
     }
 
-    // =====================================================================
-    // SAHNE 2: DETAY EKRANI
-    // =====================================================================
-    private BorderPane createPrinterDetailScreen() {
+    private String cardStyle(boolean hover) {
+        String bg = hover ? "#20202c" : BG_CARD;
+        String br = hover ? "#4a4a65" : BORDER;
+        return "-fx-background-color: " + bg + "; -fx-border-color: " + br + ";" +
+               "-fx-border-width: 1; -fx-border-radius: 12; -fx-background-radius: 12;" +
+               (hover ? "-fx-cursor: hand;" : "");
+    }
+
+
+    private BorderPane buildDetailScreen() {
         BorderPane pane = new BorderPane();
+        pane.setStyle("-fx-background-color: " + BG_DEEP + ";");
+        HBox top = new HBox(16);
+        top.setAlignment(Pos.CENTER_LEFT);
+        top.setPadding(new Insets(20, 40, 20, 40));
+        top.setStyle("-fx-background-color: " + BG_CARD + "; -fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
-        // Üst Menü
-        HBox topBar = new HBox(20);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(20, 40, 20, 40));
-        topBar.setStyle("-fx-background-color: #1e1e24;");
+        Button back = btn("◀  Geri", "#3a3a50");
+        back.setOnAction(e -> { show(dashScreen); refreshDashboardCards(); });
 
-        Button backBtn = new Button("◀ Ana Ekrana Dön");
-        styleButton(backBtn, "#464650");
-        backBtn.setOnAction(e -> switchScreen(dashboardScreen));
+        detailTitle = new Label("Yazıcı Detayı");
+        detailTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
+        detailTitle.setTextFill(Color.web(TEXT_MAIN));
 
-        Label title = new Label("Ender 3 Neo - Canlı Takip");
-        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
-        title.setTextFill(Color.WHITE);
+        connectionLbl = new Label();
+        connectionLbl.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
 
-        topBar.getChildren().addAll(backBtn, title);
-        pane.setTop(topBar);
+        top.getChildren().addAll(back, detailTitle, connectionLbl);
+        pane.setTop(top);
 
-        // Merkez Veri Alanı
-        VBox centerBox = new VBox(30);
-        centerBox.setAlignment(Pos.CENTER);
-        centerBox.setMaxWidth(700);
-        centerBox.setStyle("-fx-background-color: #1e1e24; -fx-background-radius: 15; -fx-border-color: #3c3c46; -fx-border-radius: 15; -fx-padding: 40;");
+        VBox content = new VBox(24);
+        content.setAlignment(Pos.TOP_CENTER);
+        content.setPadding(new Insets(40));
+        content.setMaxWidth(860);
 
-        // Sıcaklık Kutuları Yan Yana
-        HBox tempsBox = new HBox(30);
-        tempsBox.setAlignment(Pos.CENTER);
+        HBox tempRow = new HBox(20);
+        tempRow.setAlignment(Pos.CENTER);
 
-        VBox nozzleBox = createTempBox("NOZZLE", "#ff6b6b");
-        nozzleCurrentLabel = (Label) nozzleBox.getChildren().get(1);
-        nozzleTargetLabel = (Label) nozzleBox.getChildren().get(2);
+        VBox nozzleBox = buildTempCard("NOZZLE", ACCENT_RED);
+        nozzleCurr = (Label) ((VBox) nozzleBox).getChildren().get(1);
+        nozzleTgt  = (Label) ((VBox) nozzleBox).getChildren().get(2);
 
-        VBox bedBox = createTempBox("TABLA", "#4dadf7");
-        bedCurrentLabel = (Label) bedBox.getChildren().get(1);
-        bedTargetLabel = (Label) bedBox.getChildren().get(2);
+        VBox bedBox = buildTempCard("TABLA", ACCENT_BLUE);
+        bedCurr = (Label) ((VBox) bedBox).getChildren().get(1);
+        bedTgt  = (Label) ((VBox) bedBox).getChildren().get(2);
 
-        tempsBox.getChildren().addAll(nozzleBox, bedBox);
+        tempRow.getChildren().addAll(nozzleBox, bedBox);
 
-        // Progress Bar
+        VBox progressSection = new VBox(10);
+        progressSection.setStyle(sectionStyle());
+        progressSection.setPadding(new Insets(20));
+
+        Label progTitle = dimLabel("BASKI İLERLEMESİ");
         progressBar = new ProgressBar(0);
-        progressBar.setPrefSize(600, 30);
-        progressBar.setStyle("-fx-accent: #2ecc71;"); // İlerleme rengi
+        progressBar.setPrefSize(Double.MAX_VALUE, 22);
+        progressBar.setStyle("-fx-accent: " + ACCENT_GREEN + ";");
 
-        timeLabel = new Label("Geçen Süre: 00:00:00");
-        timeLabel.setFont(Font.font("Segoe UI", 18));
-        timeLabel.setTextFill(Color.web("#f5a623"));
+        HBox progRow = new HBox();
+        progressPct = new Label("0%");
+        progressPct.setFont(Font.font("Segoe UI", FontWeight.BOLD, 20));
+        progressPct.setTextFill(Color.web(ACCENT_GREEN));
+        Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
+        elapsedLbl = new Label("Süre: 00:00:00");
+        elapsedLbl.setFont(Font.font("Segoe UI", 16));
+        elapsedLbl.setTextFill(Color.web(ACCENT_ORG));
+        progRow.getChildren().addAll(progressPct, sp, elapsedLbl);
 
-        Button analyticsBtn = new Button("📊 İstatistikleri ve Hata Geçmişini Gör");
-        styleButton(analyticsBtn, "#6c5ce7");
-        analyticsBtn.setPrefWidth(600);
-        analyticsBtn.setOnAction(e -> {
-            refreshAnalyticsChart();
-            switchScreen(analyticsScreen);
-        });
+        progressSection.getChildren().addAll(progTitle, progressBar, progRow);
 
-        rawLabel = new Label("> Bekleniyor...");
-        rawLabel.setFont(Font.font("Consolas", 14));
-        rawLabel.setTextFill(Color.GRAY);
+        VBox rawSection = new VBox(8);
+        rawSection.setStyle(sectionStyle());
+        rawSection.setPadding(new Insets(16));
+        Label rawTitle = dimLabel("SERI PORT ÇIKTISI");
+        rawLbl = new Label("> Bekleniyor...");
+        rawLbl.setFont(Font.font("Consolas", 13));
+        rawLbl.setTextFill(Color.web("#55aa77"));
+        rawSection.getChildren().addAll(rawTitle, rawLbl);
 
-        centerBox.getChildren().addAll(tempsBox, new Label("Baskı İlerlemesi:"){{setTextFill(Color.LIGHTGRAY);}}, progressBar, timeLabel, analyticsBtn, rawLabel);
-        
-        // Merkeze oturtmak için bir Wrapper kullanıyoruz
-        StackPane wrapper = new StackPane(centerBox);
+        content.getChildren().addAll(tempRow, progressSection, rawSection);
+
+        StackPane wrapper = new StackPane(content);
         pane.setCenter(wrapper);
-
         return pane;
     }
 
-    private VBox createTempBox(String title, String colorHex) {
-        VBox box = new VBox(10);
+    private VBox buildTempCard(String label, String color) {
+        VBox box = new VBox(8);
         box.setAlignment(Pos.CENTER);
-        box.setPrefSize(250, 120);
-        box.setStyle("-fx-background-color: #26262d; -fx-border-color: #3c3c46; -fx-border-radius: 10; -fx-background-radius: 10;");
+        box.setPrefSize(260, 130);
+        box.setPadding(new Insets(20));
+        box.setStyle(sectionStyle());
 
-        Label titleLabel = new Label(title);
-        titleLabel.setTextFill(Color.GRAY);
-        titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        Label title = dimLabel(label);
+        Label cur = new Label("-- °C");
+        cur.setFont(Font.font("Segoe UI", FontWeight.BOLD, 40));
+        cur.setTextFill(Color.web(color));
+        Label tgt = new Label("Hedef: -- °C");
+        tgt.setFont(Font.font("Segoe UI", 14));
+        tgt.setTextFill(Color.web(TEXT_DIM));
 
-        Label currentLabel = new Label("-- °C");
-        currentLabel.setTextFill(Color.web(colorHex));
-        currentLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 36));
-
-        Label targetLabel = new Label("Hedef: -- °C");
-        targetLabel.setTextFill(Color.LIGHTGRAY);
-
-        box.getChildren().addAll(titleLabel, currentLabel, targetLabel);
+        box.getChildren().addAll(title, cur, tgt);
         return box;
     }
 
-    // =====================================================================
-    // SAHNE 3: JAVAFX NATIVE GRAFİK EKRANI
-    // =====================================================================
-    private BorderPane createAnalyticsScreen() {
+    private void refreshDetailScreen() {
+        if (selectedPrinter == null) return;
+        detailTitle.setText(selectedPrinter.displayName);
+        connectionLbl.setText(selectedPrinter.connected ? "  ● Bağlı" : "  ○ Bağlı Değil");
+        connectionLbl.setTextFill(Color.web(selectedPrinter.connected ? ACCENT_GREEN : ACCENT_RED));
+    }
+
+
+    private BorderPane buildAnalyticsScreen() {
         BorderPane pane = new BorderPane();
+        pane.setStyle("-fx-background-color: " + BG_DEEP + ";");
 
-        HBox topBar = new HBox(20);
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setPadding(new Insets(20, 40, 20, 40));
-        topBar.setStyle("-fx-background-color: #1e1e24;");
+        HBox top = new HBox(16);
+        top.setAlignment(Pos.CENTER_LEFT);
+        top.setPadding(new Insets(20, 40, 20, 40));
+        top.setStyle("-fx-background-color: " + BG_CARD + "; -fx-border-color: " + BORDER + "; -fx-border-width: 0 0 1 0;");
 
-        Button backBtn = new Button("◀ Yazıcıya Dön");
-        styleButton(backBtn, "#464650");
-        backBtn.setOnAction(e -> switchScreen(detailScreen));
+        Button back = btn("◀  Geri", "#3a3a50");
+        back.setOnAction(e -> show(dashScreen));
+        Label title = new Label("Genel İstatistikler");
+        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 22));
+        title.setTextFill(Color.web(TEXT_MAIN));
+        top.getChildren().addAll(back, title);
+        pane.setTop(top);
 
-        Label title = new Label("Sistem Hata Raporları");
-        title.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
-        title.setTextFill(Color.WHITE);
-
-        topBar.getChildren().addAll(backBtn, title);
-        pane.setTop(topBar);
-
-        analyticsChartContainer = new VBox();
-        analyticsChartContainer.setAlignment(Pos.CENTER);
-        pane.setCenter(analyticsChartContainer);
+        VBox body = new VBox();
+        body.setId("analyticsBody");
+        ScrollPane scroll = new ScrollPane(body);
+        scroll.setFitToWidth(true);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        pane.setCenter(scroll);
 
         return pane;
     }
 
-    private void refreshAnalyticsChart() {
-        analyticsChartContainer.getChildren().clear();
+    private void refreshAnalytics() {
+        ScrollPane scroll = (ScrollPane) analyticsScreen.getCenter();
+        VBox body = (VBox) scroll.getContent();
+        body.getChildren().clear();
+        body.setSpacing(28);
+        body.setPadding(new Insets(36, 40, 40, 40));
 
-        // JavaFX X ve Y Eksenlerini oluştur
-        CategoryAxis xAxis = new CategoryAxis();
-        xAxis.setLabel("Model Adı");
-        xAxis.setTickLabelFill(Color.WHITE);
+        List<DatabaseManager.PrinterSummary> summaries = DatabaseManager.getPrinterSummaries();
 
-        NumberAxis yAxis = new NumberAxis();
-        yAxis.setLabel("Hata Sayısı");
-        yAxis.setTickLabelFill(Color.WHITE);
+        Label secTitle1 = sectionHeader("Yazıcı Başına Özet");
+        body.getChildren().add(secTitle1);
 
-        BarChart<String, Number> barChart = new BarChart<>(xAxis, yAxis);
-        barChart.setTitle("İptal Edilen / Hatalı Baskılar");
-        barChart.setLegendVisible(false);
-        barChart.setStyle("-fx-background-color: transparent;"); // Koyu temaya uygun şeffaflık
-        barChart.setMaxSize(1000, 600);
-
-        XYChart.Series<String, Number> dataSeries = new XYChart.Series<>();
-
-        String query = "SELECT print_name, COUNT(*) as fail_count FROM print_jobs WHERE status = 'HATALI' GROUP BY print_name";
-        boolean hasData = false;
-
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:farm_stats.db");
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(query)) {
-
-            while (rs.next()) {
-                hasData = true;
-                dataSeries.getData().add(new XYChart.Data<>(rs.getString("print_name"), rs.getInt("fail_count")));
-            }
-        } catch (Exception e) {
-            System.out.println("[Grafik Hata] " + e.getMessage());
-        }
-
-        if (hasData) {
-            barChart.getData().add(dataSeries);
-            analyticsChartContainer.getChildren().add(barChart);
+        if (summaries.isEmpty()) {
+            body.getChildren().add(emptyNote("Henüz tamamlanan baskı kaydı yok."));
         } else {
-            Label noDataLabel = new Label("Hatalı baskı kaydı bulunamadı. Farm sorunsuz çalışıyor! 🚀");
-            noDataLabel.setTextFill(Color.web("#2ecc71"));
-            noDataLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
-            analyticsChartContainer.getChildren().add(noDataLabel);
+            FlowPane summaryGrid = new FlowPane();
+            summaryGrid.setHgap(20);
+            summaryGrid.setVgap(20);
+            for (DatabaseManager.PrinterSummary s : summaries) {
+                summaryGrid.getChildren().add(buildSummaryCard(s));
+            }
+            body.getChildren().add(summaryGrid);
+        }
+
+        Label secTitle2 = sectionHeader("Son 20 Baskı");
+        body.getChildren().add(secTitle2);
+
+        List<String[]> recent = DatabaseManager.getRecentJobs(20);
+        if (recent.isEmpty()) {
+            body.getChildren().add(emptyNote("Henüz kayıtlı baskı yok."));
+        } else {
+            body.getChildren().add(buildRecentTable(recent));
+        }
+
+        Label secTitle3 = sectionHeader("En Sık Karşılaşılan Hatalar");
+        body.getChildren().add(secTitle3);
+
+        List<String[]> errors = DatabaseManager.getErrorBreakdown();
+        if (errors.isEmpty()) {
+            Label ok = new Label("🚀  Hiç hata kaydı yok — farm sorunsuz çalışıyor!");
+            ok.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
+            ok.setTextFill(Color.web(ACCENT_GREEN));
+            ok.setPadding(new Insets(20));
+            body.getChildren().add(ok);
+        } else {
+            body.getChildren().add(buildErrorBars(errors));
         }
     }
 
-    // =====================================================================
-    // GÜNCELLEME VE STİL
-    // =====================================================================
-    private void updateLiveUI() {
-        nozzleCurrentLabel.setText(PrinterState.nozzleCurrent + " °C");
-        nozzleTargetLabel.setText("Hedef: " + PrinterState.nozzleTarget + " °C");
-        
-        bedCurrentLabel.setText(PrinterState.bedCurrent + " °C");
-        bedTargetLabel.setText("Hedef: " + PrinterState.bedTarget + " °C");
+    private VBox buildSummaryCard(DatabaseManager.PrinterSummary s) {
+        VBox card = new VBox(12);
+        card.setPrefWidth(340);
+        card.setPadding(new Insets(22));
+        card.setStyle(sectionStyle());
 
-        progressBar.setProgress(PrinterState.progressPercent / 100.0); // JavaFX progress 0.0 - 1.0 arası çalışır
-        timeLabel.setText("Geçen Süre: " + PrinterState.elapsedTime);
-        
-        if (PrinterState.rawData != null && !PrinterState.rawData.isEmpty()) {
-            rawLabel.setText("> " + PrinterState.rawData);
+        Label name = new Label(s.printerName);
+        name.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
+        name.setTextFill(Color.web(TEXT_MAIN));
+
+        // Başarı oranı
+        double rate = s.totalJobs > 0 ? (s.successJobs * 100.0 / s.totalJobs) : 0;
+        ProgressBar bar = new ProgressBar(rate / 100.0);
+        bar.setPrefWidth(Double.MAX_VALUE);
+        bar.setPrefHeight(14);
+        bar.setStyle("-fx-accent: " + (rate >= 80 ? ACCENT_GREEN : rate >= 50 ? ACCENT_ORG : ACCENT_RED) + ";");
+
+        HBox rateRow = new HBox();
+        Label rateL = new Label(String.format("Başarı Oranı  %.0f%%", rate));
+        rateL.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
+        rateL.setTextFill(Color.web(rate >= 80 ? ACCENT_GREEN : rate >= 50 ? ACCENT_ORG : ACCENT_RED));
+        Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
+        Label totL = new Label(s.totalJobs + " baskı");
+        totL.setFont(Font.font("Segoe UI", 13));
+        totL.setTextFill(Color.web(TEXT_DIM));
+        rateRow.getChildren().addAll(rateL, sp, totL);
+
+        VBox stats = new VBox(6);
+        stats.getChildren().addAll(
+            statRow("✅  Başarılı",   String.valueOf(s.successJobs), ACCENT_GREEN),
+            statRow("❌  Hatalı",     String.valueOf(s.failJobs),    ACCENT_RED),
+            statRow("⏱  Toplam Süre", formatSeconds(s.totalSeconds), ACCENT_ORG),
+            statRow("🧵  Filament",   String.format("%.1f m", s.totalFilamentM), ACCENT_BLUE)
+        );
+
+        card.getChildren().addAll(name, rateRow, bar, new Separator(), stats);
+        return card;
+    }
+
+    private HBox statRow(String lbl, String val, String color) {
+        HBox row = new HBox();
+        row.setAlignment(Pos.CENTER_LEFT);
+        Label l = new Label(lbl);
+        l.setFont(Font.font("Segoe UI", 13));
+        l.setTextFill(Color.web(TEXT_DIM));
+        l.setPrefWidth(160);
+        Label v = new Label(val);
+        v.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+        v.setTextFill(Color.web(color));
+        row.getChildren().addAll(l, v);
+        return row;
+    }
+
+    private VBox buildRecentTable(List<String[]> rows) {
+        VBox table = new VBox(0);
+        table.setStyle(sectionStyle());
+
+        // Header
+        HBox header = tableRow(
+            new String[]{"Yazıcı", "Model Adı", "Durum", "Süre", "Filament", "Tarih"},
+            true
+        );
+        table.getChildren().add(header);
+
+        for (int i = 0; i < rows.size(); i++) {
+            HBox row = tableRow(rows.get(i), false);
+            if (i % 2 == 1) row.setStyle("-fx-background-color: #1f1f2a;");
+            table.getChildren().add(row);
+        }
+        return table;
+    }
+
+    private HBox tableRow(String[] cols, boolean isHeader) {
+        HBox row = new HBox();
+        row.setPadding(new Insets(10, 16, 10, 16));
+        double[] widths = {180, 240, 90, 100, 100, 180};
+        for (int i = 0; i < cols.length; i++) {
+            Label l = new Label(cols[i] != null ? cols[i] : "—");
+            l.setPrefWidth(widths[i]);
+            l.setWrapText(true);
+            if (isHeader) {
+                l.setFont(Font.font("Segoe UI", FontWeight.BOLD, 12));
+                l.setTextFill(Color.web(TEXT_DIM));
+            } else {
+                l.setFont(Font.font("Segoe UI", 13));
+                // Duruma göre renk
+                if (i == 2) {
+                    String status = cols[2];
+                    l.setTextFill(Color.web(
+                        "BAŞARILI".equals(status) ? ACCENT_GREEN :
+                        "HATALI".equals(status)   ? ACCENT_RED   : ACCENT_ORG
+                    ));
+                    l.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+                } else {
+                    l.setTextFill(Color.web(TEXT_MAIN));
+                }
+            }
+            row.getChildren().add(l);
+        }
+        return row;
+    }
+
+    private VBox buildErrorBars(List<String[]> errors) {
+        VBox container = new VBox(10);
+        container.setStyle(sectionStyle());
+        container.setPadding(new Insets(20));
+
+        // Maksimum sayıyı bul (normalleştirme için)
+        int max = errors.stream().mapToInt(r -> Integer.parseInt(r[1])).max().orElse(1);
+
+        for (String[] row : errors) {
+            int count = Integer.parseInt(row[1]);
+            double ratio = (double) count / max;
+
+            HBox errRow = new HBox(12);
+            errRow.setAlignment(Pos.CENTER_LEFT);
+
+            Label errLabel = new Label(row[0] != null ? row[0] : "Bilinmeyen hata");
+            errLabel.setPrefWidth(280);
+            errLabel.setFont(Font.font("Consolas", 13));
+            errLabel.setTextFill(Color.web(TEXT_MAIN));
+
+            ProgressBar errBar = new ProgressBar(ratio);
+            errBar.setPrefWidth(300);
+            errBar.setPrefHeight(16);
+            errBar.setStyle("-fx-accent: " + ACCENT_RED + ";");
+
+            Label cntLabel = new Label(count + "x");
+            cntLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 13));
+            cntLabel.setTextFill(Color.web(ACCENT_RED));
+
+            errRow.getChildren().addAll(errLabel, errBar, cntLabel);
+            container.getChildren().add(errRow);
+        }
+        return container;
+    }
+
+    // ── Periyodik UI güncellemesi ─────────────────────────────────────────
+
+    private void tickUI() {
+        // Detay ekranı
+        if (detailScreen.isVisible() && selectedPrinter != null) {
+            PrinterState p = selectedPrinter;
+            nozzleCurr.setText(p.nozzleCurrent + " °C");
+            nozzleTgt.setText("Hedef: " + p.nozzleTarget + " °C");
+            bedCurr.setText(p.bedCurrent + " °C");
+            bedTgt.setText("Hedef: " + p.bedTarget + " °C");
+            progressBar.setProgress(p.progressPercent / 100.0);
+            progressPct.setText(p.progressPercent + "%");
+            elapsedLbl.setText("Süre: " + p.elapsedTime);
+            rawLbl.setText("> " + (p.rawData != null ? p.rawData : ""));
+            connectionLbl.setText(p.connected ? "  ● Bağlı" : "  ○ Bağlı Değil");
+            connectionLbl.setTextFill(Color.web(p.connected ? ACCENT_GREEN : ACCENT_RED));
+        }
+
+        // Dashboard'daki mini kartları güncelle (sadece durum etiketi)
+        if (dashScreen.isVisible()) {
+            for (PrinterState p : PrinterManager.getPrinters()) {
+                Label lbl = cardStatusMap.get(p.portName);
+                if (lbl != null) {
+                    lbl.setText(p.connected ? "● Bağlı" : "○ Bağlı Değil");
+                    lbl.setTextFill(Color.web(p.connected ? ACCENT_GREEN : TEXT_DIM));
+                }
+            }
         }
     }
 
-    private void styleButton(Button btn, String colorHex) {
-        btn.setStyle("-fx-background-color: " + colorHex + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 10 20 10 20; -fx-background-radius: 5;");
-        btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: derive(" + colorHex + ", 20%); -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 10 20 10 20; -fx-background-radius: 5; -fx-cursor: hand;"));
-        btn.setOnMouseExited(e -> btn.setStyle("-fx-background-color: " + colorHex + "; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 10 20 10 20; -fx-background-radius: 5;"));
+    // ── Yardımcı stil / widget metodları ─────────────────────────────────
+
+    private String sectionStyle() {
+        return "-fx-background-color: " + BG_CARD + "; -fx-border-color: " + BORDER + ";" +
+               "-fx-border-width: 1; -fx-border-radius: 10; -fx-background-radius: 10;";
+    }
+
+    private Label sectionHeader(String text) {
+        Label l = new Label(text);
+        l.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
+        l.setTextFill(Color.web(TEXT_MAIN));
+        l.setPadding(new Insets(8, 0, 4, 0));
+        return l;
+    }
+
+    private Label dimLabel(String text) {
+        Label l = new Label(text);
+        l.setFont(Font.font("Segoe UI", FontWeight.BOLD, 11));
+        l.setTextFill(Color.web(TEXT_DIM));
+        return l;
+    }
+
+    private Label emptyNote(String text) {
+        Label l = new Label(text);
+        l.setFont(Font.font("Segoe UI", 15));
+        l.setTextFill(Color.web(TEXT_DIM));
+        l.setPadding(new Insets(16));
+        return l;
+    }
+
+    private Button btn(String text, String color) {
+        Button b = new Button(text);
+        b.setStyle("-fx-background-color: " + color + "; -fx-text-fill: white;" +
+                   "-fx-font-weight: bold; -fx-font-size: 13px;" +
+                   "-fx-padding: 9 18 9 18; -fx-background-radius: 6;");
+        b.setOnMouseEntered(e -> b.setStyle("-fx-background-color: derive(" + color + ",20%); -fx-text-fill: white;" +
+                "-fx-font-weight: bold; -fx-font-size: 13px; -fx-padding: 9 18 9 18; -fx-background-radius: 6; -fx-cursor: hand;"));
+        b.setOnMouseExited(e -> b.setStyle("-fx-background-color: " + color + "; -fx-text-fill: white;" +
+                "-fx-font-weight: bold; -fx-font-size: 13px; -fx-padding: 9 18 9 18; -fx-background-radius: 6;"));
+        return b;
+    }
+
+    private String formatSeconds(long secs) {
+        if (secs <= 0) return "—";
+        long h = secs / 3600, m = (secs % 3600) / 60;
+        return h > 0 ? h + " sa " + m + " dk" : m + " dk";
+    }
+
+    private static class Separator extends Region {
+        Separator() {
+            setPrefHeight(1);
+            setMaxWidth(Double.MAX_VALUE);
+            setStyle("-fx-background-color: " + BORDER + ";");
+            VBox.setMargin(this, new Insets(4, 0, 4, 0));
+        }
     }
 }

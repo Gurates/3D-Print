@@ -6,8 +6,6 @@ import java.io.InputStream;
 import java.util.Scanner;
 
 public class EnderMonitor {
-    
-    // Arayüzün (UI) anlık olarak okuyabilmesi için güncel yazıcı çıktısını tutan değişken
     public static volatile String sonYaziciYaniti = "";
 
     public static void veriCekmeyeBasla() {
@@ -19,7 +17,6 @@ public class EnderMonitor {
             return;
         }
 
-        // Bilgisayara bağlı ilk seri cihazı otomatik seçiyoruz
         SerialPort printerPort = ports[0]; 
         printerPort.setBaudRate(115200); 
         printerPort.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 2000, 0);
@@ -29,7 +26,6 @@ public class EnderMonitor {
             return;
         }
 
-        // Bağlantı ilk kurulduğunda kartın kendine gelmesi için 2 saniye bekleme
         try { Thread.sleep(2000); } catch (InterruptedException e) {}
 
         try (OutputStream out = printerPort.getOutputStream();
@@ -39,17 +35,13 @@ public class EnderMonitor {
             System.out.println("[Başarılı] Yazıcı bağlantısı aktif. Veri akışı başladı...");
 
             while (true) {
-                // Sıcaklık komutunu gönderiyoruz
                 out.write("M105\n".getBytes());
                 out.flush();
 
                 if (scanner.hasNextLine()) {
                     String response = scanner.nextLine();
-                    // Arayüzün yakalaması için veriyi köprü değişkene yazıyoruz
                     sonYaziciYaniti = response;
                 }
-                
-                // Yazıcıyı yormamak için 2 saniyede bir sorgula
                 Thread.sleep(2000); 
             }
 

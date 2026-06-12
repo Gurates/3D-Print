@@ -3,62 +3,89 @@ package printer;
 import com.fazecast.jSerialComm.SerialPort;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Scanner;
 
 public class PrinterManager {
 
+    private static final List<PrinterState> printers = Collections.synchronizedList(new ArrayList<>());
+
+    public static List<PrinterState> getPrinters() {
+        return printers;
+    }
+
     public static void startMonitoring() {
         SerialPort[] ports = SerialPort.getCommPorts();
         if (ports.length == 0) {
-            System.out.println("Hata: Seri port bulunamadı!");
+            System.out.println("[PrinterManager] Seri port bulunamadı. Simülasyon modu aktif.");
+            PrinterState dummy = new PrinterState("SIM", "Simülasyon Yazıcısı");
+            dummy.connected      = true;
+            dummy.nozzleCurrent  = "210.5";
+            dummy.nozzleTarget   = "215.0";
+            dummy.bedCurrent     = "60.2";
+            dummy.bedTarget      = "60.0";
+            dummy.progressPercent = 45;
+            dummy.elapsedTime    = "01:23:00";
+            dummy.rawData        = "T:210.5 /215.0 B:60.2 /60.0";
+            printers.add(dummy);
             return;
         }
 
-        SerialPort printerPort = ports[0]; 
-        printerPort.setBaudRate(115200);
-        printerPort.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 1000, 0);
+        for (int i = 0; i < ports.length; i++) {
+            final SerialPort port  = ports[i];
+            final String displayName = "Yazıcı " + (i + 1) + " (" + port.getSystemPortName() + ")";
+            final PrinterState state = new PrinterState(port.getSystemPortName(), displayName);
+            printers.add(state);
 
-        if (!printerPort.openPort()) {
-            System.out.println("Hata: Port açılamadı!");
+            Thread t = new Thread(() -> monitorPort(port, state));
+            t.setDaemon(true);
+            t.setName("printer-" + port.getSystemPortName());
+            t.start();
+        }
+    }
+
+    private static void monitorPort(SerialPort port, PrinterState state) {
+        port.setBaudRate(115200);
+        port.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 1000, 0);
+
+        if (!port.openPort()) {
+            System.out.println("[" + state.displayName + "] Port açılamadı!");
+            state.rawData = "Port açılamadı — başka program kullanıyor olabilir.";
             return;
         }
 
-        try { Thread.sleep(2000); } catch (InterruptedException e) {}
+        state.connected = true;
+        System.out.println("[" + state.displayName + "] Bağlandı.");
 
-        // Yazıcıdan okuma yapacak ayrı bir dinleyici Thread (Buffer şişmesini önler)
+        try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+        GCodeParser parser = new GCodeParser(state);
         Thread readerThread = new Thread(() -> {
-            try (InputStream in = printerPort.getInputStream();
+            try (InputStream in = port.getInputStream();
                  Scanner scanner = new Scanner(in)) {
-                while (printerPort.isOpen()) {
+                while (port.isOpen()) {
                     if (scanner.hasNextLine()) {
-                        String line = scanner.nextLine();
-                        GCodeParser.parseLine(line); // Gelen her satırı ayrıştırıcıya yolla
+                        parser.parseLine(scanner.nextLine());
                     }
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                System.out.println("[" + state.displayName + "] Okuma hatası: " + e.getMessage());
             }
         });
         readerThread.setDaemon(true);
         readerThread.start();
-
-        // Komut gönderici ana döngü
-        try (OutputStream out = printerPort.getOutputStream()) {
+        try (OutputStream out = port.getOutputStream()) {
             while (true) {
-                // Komutları sırayla gönderiyoruz (Sıcaklık, SD Durumu, Süre)
-                out.write("M105\n".getBytes());
-                Thread.sleep(500); // Marlin'i boğmamak için aralarda kısa esler veriyoruz
-                
-                out.write("M27\n".getBytes());
-                Thread.sleep(500);
-                
-                out.write("M31\n".getBytes());
-                Thread.sleep(1000); // Toplam döngü süresi 2 saniye
+                out.write("M105\n".getBytes()); Thread.sleep(500);
+                out.write("M27\n".getBytes());  Thread.sleep(500);
+                out.write("M31\n".getBytes());  Thread.sleep(1000);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("[" + state.displayName + "] Bağlantı kesildi: " + e.getMessage());
         } finally {
-            printerPort.closePort();
+            state.connected = false;
+            port.closePort();
         }
     }
 }

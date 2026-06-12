@@ -1,12 +1,24 @@
 package printer;
 
 public class PrinterState {
-    public static volatile String nozzleCurrent = "--";
-    public static volatile String nozzleTarget = "--";
-    public static volatile String bedCurrent = "--";
-    public static volatile String bedTarget = "--";
-    
-    public static volatile int progressPercent = 0;
-    public static volatile String elapsedTime = "00:00:00";
-    public static volatile String rawData = "Cihaz bekleniyor...";
+    public final String portName;
+    public String displayName;
+
+    public volatile String nozzleCurrent = "--";
+    public volatile String nozzleTarget  = "--";
+    public volatile String bedCurrent    = "--";
+    public volatile String bedTarget     = "--";
+
+    public volatile int    progressPercent = 0;
+    public volatile String elapsedTime     = "00:00:00";
+    public volatile String rawData         = "Bekleniyor...";
+    public volatile boolean connected      = false;
+
+    public volatile String  currentPrintName = "";
+    public volatile boolean isPrinting       = false;
+
+    public PrinterState(String portName, String displayName) {
+        this.portName    = portName;
+        this.displayName = displayName;
+    }
 }
