@@ -11,7 +11,6 @@ public class DatabaseManager {
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement()) {
             
-            // 1. Baskı Geçmişi Tablosu
             stmt.execute(
                 "CREATE TABLE IF NOT EXISTS print_jobs (" +
                 "  id               INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -41,7 +40,6 @@ public class DatabaseManager {
         }
     }
 
-    // --- YENİ: AYAR KAYDETME VE OKUMA METOTLARI ---
     public static void saveSetting(String key, String value) {
         String sql = "INSERT OR REPLACE INTO settings (setting_key, setting_value) VALUES (?, ?)";
         try (Connection conn = DriverManager.getConnection(DB_URL);
@@ -67,9 +65,8 @@ public class DatabaseManager {
         } catch (Exception e) {
             System.out.println("[DB Hata] Ayar okunamadı: " + e.getMessage());
         }
-        return defaultValue; // Bulamazsa varsayılanı döndür
+        return defaultValue;
     }
-    // -----------------------------------------------
 
     public static void logPrintJob(String printerPort, String printerName, String printName, String status, String durationText, int durationSeconds, double filamentMm, String errorReason) {
         String sql = "INSERT INTO print_jobs (printer_port, printer_name, print_name, status, duration_text, duration_seconds, filament_mm, error_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";

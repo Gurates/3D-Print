@@ -14,7 +14,6 @@ public class TelegramNotifier {
             .build();
 
     public static void sendMessage(String message) {
-        // YENİ: Ayarları anlık olarak SQLite'dan çekiyoruz
         String botToken = DatabaseManager.getSetting("telegram_bot_token", "");
         String chatId = DatabaseManager.getSetting("telegram_chat_id", "");
 
