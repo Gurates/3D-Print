@@ -1,6 +1,5 @@
 plugins {
     id 'application'
-    // Garantili ve kararlı çalışan JavaFX eklenti sürümüne çektik
     id 'org.openjfx.javafxplugin' version '0.0.14'
 }
 
@@ -11,6 +10,7 @@ repositories {
 dependencies {
     implementation 'com.fazecast:jSerialComm:2.11.0'
     implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
+    implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
 }
 
 javafx {

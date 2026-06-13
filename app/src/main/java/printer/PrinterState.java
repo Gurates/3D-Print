@@ -6,7 +6,7 @@ public class PrinterState {
     public final String portName;
     public String displayName;
 
-    public String printerModel = "Bilinmeyen Model"; 
+    public String printerModel = "Unknown Model"; 
     public PrinterDriver driver; 
 
     public volatile String nozzleCurrent = "--";
@@ -16,7 +16,7 @@ public class PrinterState {
 
     public volatile int    progressPercent = 0;
     public volatile String elapsedTime     = "00:00:00";
-    public volatile String rawData         = "Bekleniyor...";
+    public volatile String rawData         = "Waiting...";
     public volatile boolean connected      = false;
     public volatile String  currentPrintName = "";
     public volatile boolean isPrinting       = false;
