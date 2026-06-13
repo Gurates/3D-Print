@@ -28,7 +28,7 @@ public class WifiPrinter {
 
             for (int i = 1; i <= 3; i++) {
                 System.out.println("=== DÖNGÜ #" + i + " ===");
-
+                
                 out.println("M105");
                 String line = in.readLine();
                 if (line != null) {

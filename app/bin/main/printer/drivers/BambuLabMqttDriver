@@ -1,0 +1,31 @@
+package printer;
+
+public class BambuLabMqttDriver implements PrinterDriver {
+    private String mqttBrokerUrl;
+    private String accessCode;
+
+    public BambuLabMqttDriver(String ip, String accessCode) {
+        this.mqttBrokerUrl = "tcp://" + ip + ":1883";
+        this.accessCode = accessCode;
+    }
+
+    @Override
+    public void connect(){
+
+    }
+
+    @Override
+    public void updateState(PrinterState state) {
+    }
+
+    @Override
+    public void disconnect(){
+
+    }
+
+    
+    @Override
+    public void sendCommand(String cmd){
+
+    }
+}
