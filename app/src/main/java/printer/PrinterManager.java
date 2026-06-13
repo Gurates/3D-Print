@@ -10,6 +10,7 @@ import java.util.Scanner;
 
 public class PrinterManager {
 
+
     private static final List<PrinterState> printers = Collections.synchronizedList(new ArrayList<>());
 
     public static List<PrinterState> getPrinters() {
@@ -60,7 +61,9 @@ public class PrinterManager {
         System.out.println("[" + state.displayName + "] Bağlandı.");
 
         try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+
         GCodeParser parser = new GCodeParser(state);
+
         Thread readerThread = new Thread(() -> {
             try (InputStream in = port.getInputStream();
                  Scanner scanner = new Scanner(in)) {
@@ -75,6 +78,7 @@ public class PrinterManager {
         });
         readerThread.setDaemon(true);
         readerThread.start();
+
         try (OutputStream out = port.getOutputStream()) {
             while (true) {
                 out.write("M105\n".getBytes()); Thread.sleep(500);

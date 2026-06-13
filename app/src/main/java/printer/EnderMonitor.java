@@ -10,15 +10,15 @@ public class EnderMonitor {
 
     public static void veriCekmeyeBasla() {
         SerialPort[] ports = SerialPort.getCommPorts();
-        
+
         System.out.println("=== 3D FARM YAZICI TARAMA ===");
         if (ports.length == 0) {
             System.out.println("Hata: Bilgisayara bağlı herhangi bir seri cihaz bulunamadı!");
             return;
         }
 
-        SerialPort printerPort = ports[0]; 
-        printerPort.setBaudRate(115200); 
+        SerialPort printerPort = ports[0];
+        printerPort.setBaudRate(115200);
         printerPort.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 2000, 0);
 
         if (!printerPort.openPort()) {
